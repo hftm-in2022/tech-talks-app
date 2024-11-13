@@ -1,17 +1,15 @@
 import {
   Component,
-  computed,
   effect,
   inject,
   model,
-  signal,
-  untracked,
 } from '@angular/core';
 import { TechTalksService } from '../tech-talks.service';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { NgFor } from '@angular/common';
-import { distinctUntilChanged, lastValueFrom } from 'rxjs';
+import { distinctUntilChanged } from 'rxjs';
+import { TechTalkListStateService } from './state/tech-talk-list-state.service';
 
 export type TechTalk = {
   id: number;
@@ -43,11 +41,15 @@ export type TechTalk = {
     </label>
 
     <ul>
+      @if(loading()) {
+      <li>...loading</li>
+      } @else {
       <li *ngFor="let talk of filteredTechTalks()">
         <p>Rating: {{ talk.rating }}</p>
         <a [routerLink]="['/talk', talk.id]">{{ talk.title }}</a>
         <p>{{ talk.speaker }}</p>
       </li>
+      }
     </ul>
   </div>`,
   styleUrl: './tech-talk-list.component.css',
@@ -57,44 +59,43 @@ export class TechTalkListComponent {
   router = inject(Router);
   activatedRoute = inject(ActivatedRoute);
 
+  techTalkListStateService = inject(TechTalkListStateService);
+
   readonly techTalks = model<TechTalk[]>([]);
   readonly searchTitle = model<string>('');
   readonly searchSpeaker = model('');
   readonly highRatingOnly = model(false);
 
-  filteredTechTalks = signal<TechTalk[]>([]);
+  filteredTechTalks = this.techTalkListStateService.techTalks;
+  loading = this.techTalkListStateService.loading;
 
   constructor() {
-    this.activatedRoute.queryParamMap.pipe(distinctUntilChanged()).subscribe((params) => {
-      this.searchTitle.set(params.get('searchTitle') || '');
-      this.searchSpeaker.set(params.get('searchSpeaker') || '');
-      this.highRatingOnly.set(params.get('highRatingOnly') === 'true');
-   });
+    this.activatedRoute.queryParamMap
+      .pipe(distinctUntilChanged())
+      .subscribe((params) => {
+        this.searchTitle.set(params.get('searchTitle') || '');
+        this.searchSpeaker.set(params.get('searchSpeaker') || '');
+        this.highRatingOnly.set(params.get('highRatingOnly') === 'true');
+        this.techTalkListStateService.rxGetTechTalks({
+          searchTitle: this.searchTitle(),
+          searchSpeaker: this.searchSpeaker(),
+          highRatingOnly: this.highRatingOnly(),
+        });
+      });
 
-    effect(async () => {
+    effect(() => {
       const filter = {
         searchTitle: this.searchTitle(),
         searchSpeaker: this.searchSpeaker(),
         highRatingOnly: this.highRatingOnly(),
       };
-      untracked(async () => {
-        await this.filterData(filter);
+      this.router.navigate(['talks'], {
+        queryParams: {
+          searchTitle: filter.searchTitle,
+          searchSpeaker: filter.searchSpeaker,
+          highRatingOnly: filter.highRatingOnly,
+        },
       });
-    });
-  }
-
-  private async filterData(filter: { searchTitle: string; searchSpeaker: string; highRatingOnly: boolean; }) {
-    console.log('Filtering data...', filter);
-    const result = await lastValueFrom(
-      this.techTalksService.getTechTalks(filter.searchTitle, filter.searchSpeaker, filter.highRatingOnly)
-    );
-    this.filteredTechTalks.set(result);
-    this.router.navigate(['talks'], {
-      queryParams: {
-        searchTitle: filter.searchTitle,
-        searchSpeaker: filter.searchSpeaker,
-        highRatingOnly: filter.highRatingOnly,
-      },
     });
   }
 }

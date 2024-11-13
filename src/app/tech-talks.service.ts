@@ -3,7 +3,7 @@ import { Injectable } from '@angular/core';
 import { TECH_TALKS } from './tech-talks.data';
 import { delay, Observable, of } from 'rxjs';
 
-type TechTalk = {
+export type TechTalk = {
   id: number;
   title: string;
   speaker: string;
